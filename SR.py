@@ -18,103 +18,136 @@ class SR(nn.Module):
         self.conv1 = nn.Conv3d(1, 64, kernel_size=(1, 3, 3), stride=(1, 1, 1), padding=(0, 1, 1))
         self.instancenorm1 = nn.InstanceNorm3d(64, affine=True)  # affine=True --> Learnable parameters
         self.conv2 = nn.Conv3d(64, 64, kernel_size=(1, 3, 3), stride=(1, 1, 1), padding=(0, 1, 1))
-        self.instancenorm2 = nn.InstanceNorm3d(64, affine=True)
+        self.instancenorm2 = nn.InstanceNorm3d(1, affine=True)
         # FusionNet
         self.conv3 = nn.Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(0, 1, 1))
-        self.conv4 = nn.Conv3d(64, 1, kernel_size=(1, 1, 1), stride=(1, 1, 1), padding=(0, 1, 1))
+        self.conv4 = nn.Conv3d(64, 1, kernel_size=(1, 1, 1), stride=(3, 1, 1), padding=(0, 0, 0))
+        self.instancenorm3 = nn.InstanceNorm3d(1, affine=True)
 
     def forward(self, image_t1, image_t2, image_t3, image_t4, image_t5):  # x=[b, 1, depth, height, weight] --> interpolated image
         # print(image_t1.shape)  # [32,5,64,64]
-        x = []
+        data_list = []
         image_t1.unsqueeze(1)
-        x1 = torch.reshape(image_t1, (32, 1, 4, 64, 64))  # (32,1,5,64,64)
-        x.append(x1)
+        x1 = torch.reshape(image_t1, (4, 1, 4, 128, 128))  # (B,C,D,H,W)
+        data_list.append(x1)
         image_t2.unsqueeze(1)
-        x2 = torch.reshape(image_t2, (32, 1, 4, 64, 64))  # (32,1,5,64,64)
-        x.append(x2)
+        x2 = torch.reshape(image_t2, (4, 1, 4, 128, 128))
+        data_list.append(x2)
         image_t3.unsqueeze(1)
-        x3 = torch.reshape(image_t3, (32, 1, 4, 64, 64))  # (32,1,5,64,64)
-        x.append(x3)
+        x3 = torch.reshape(image_t3, (4, 1, 4, 128, 128))
+        data_list.append(x3)
         image_t4.unsqueeze(1)
-        x4 = torch.reshape(image_t4, (32, 1, 4, 64, 64))  # (32,1,5,64,64)
-        x.append(x4)
+        x4 = torch.reshape(image_t4, (4, 1, 4, 128, 128))
+        data_list.append(x4)
         image_t5.unsqueeze(1)
-        x5 = torch.reshape(image_t5, (32, 1, 4, 64, 64))  # (32,1,5,64,64)
-        x.append(x5)
-        image_interpol = []
+        x5 = torch.reshape(image_t5, (4, 1, 4, 128, 128))
+        data_list.append(x5)
+
         images = []
 
         # SISRNET
-        for i in range(5):  # range(x) con x el número de imagenes por cada batch_size
+        for i in data_list:
 
-            x = x[i]
-            x.unsqueeze(1)
+            x = i
             # print(x.shape)
-
-            image_interpol.append(x)
+            # x.unsqueeze(1)
 
             x = self.conv1(x)
             x = self.instancenorm1(x)
             x = F.leaky_relu(x)
 
-            x = self.conv2(x)
-            x = self.instancenorm2(x)
-            x = F.leaky_relu(x)
+            # print(x.shape)
 
             x = self.conv2(x)
-            x = self.instancenorm2(x)
+            x = self.instancenorm1(x)
             x = F.leaky_relu(x)
 
-            x = self.conv2(x)
-            x = self.instancenorm2(x)
-            x = F.leaky_relu(x)
+            # print(x.shape)
 
             x = self.conv2(x)
-            x = self.instancenorm2(x)
+            x = self.instancenorm1(x)
             x = F.leaky_relu(x)
 
-            x = self.conv2(x)
-            x = self.instancenorm2(x)
-            x = F.leaky_relu(x)
+            # print(x.shape)
 
             x = self.conv2(x)
-            x = self.instancenorm2(x)
+            x = self.instancenorm1(x)
             x = F.leaky_relu(x)
 
+            # print(x.shape)
+
             x = self.conv2(x)
-            x = self.instancenorm2(x)
+            x = self.instancenorm1(x)
             x = F.leaky_relu(x)
+
+            # print(x.shape)
+
+            x = self.conv2(x)
+            x = self.instancenorm1(x)
+            x = F.leaky_relu(x)
+
+            # print(x.shape)
+
+            x = self.conv2(x)
+            x = self.instancenorm1(x)
+            x = F.leaky_relu(x)
+
+            # print(x.shape)
+
+            x = self.conv2(x)
+            x = self.instancenorm1(x)
+            x = F.leaky_relu(x)
+
+            # print(x.shape)
 
             images.append(x)
 
         # Concatenate tensors
 
-        x = torch.cat(images, dim=2)  # (1, 1, 9, H, W)
-        image_interpol = torch.cat(image_interpol, dim=2)
-        image_mean = image_interpol.mean(dim=2)
+        x = torch.cat(images, dim=2)
+        image_interpol = torch.cat(data_list, dim=1)
+        print(image_interpol.shape)
+        image_mean = image_interpol.mean(dim=1)
+        image_mean.unsqueeze(1)
+        image_mean = image_mean.reshape((4, 1, 4, 128, 128))
+        print(image_mean.shape)
+
+        # print(x.shape)
 
         # FusionNet
         x = self.conv3(x)
-        x = self.instancenorm2(x)
-        x = F.leaky_relu(x)
-
-        x = self.conv3(x)
-        x = self.instancenorm2(x)
-        x = F.leaky_relu(x)
-
-        x = self.conv3(x)
-        x = self.instancenorm2(x)
-        x = F.leaky_relu(x)
-
-        x = self.conv3(x)
-        x = self.instancenorm2(x)
-        x = F.leaky_relu(x)
-
-        x = self.conv4(x)
         x = self.instancenorm1(x)
         x = F.leaky_relu(x)
 
+        # print(x.shape)
+
+        x = self.conv3(x)
+        x = self.instancenorm1(x)
+        x = F.leaky_relu(x)
+
+        # print(x.shape)
+
+        x = self.conv3(x)
+        x = self.instancenorm1(x)
+        x = F.leaky_relu(x)
+
+        # print(x.shape)
+
+        x = self.conv3(x)
+        x = self.instancenorm1(x)
+        x = F.leaky_relu(x)
+
+        # print(x.shape)
+
+        x = self.conv4(x)
+        x = self.instancenorm2(x)
+        x = F.leaky_relu(x)
+
+        print(x.shape)
+
         x += image_mean
+
+        x = x.double()
 
         return x
 
@@ -122,13 +155,16 @@ class SR(nn.Module):
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
     for batch_idx, (samples, t) in enumerate(train_loader):  # data corresponde a las 5 imagenes LR, target imag HR
-        # data = cv2.resize(data, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-        image_t1 = samples['image_1'].to(device)
-        image_t2 = samples['image_2'].to(device)
-        image_t3 = samples['image_3'].to(device)
-        image_t4 = samples['image_4'].to(device)
-        image_t5 = samples['image_5'].to(device)
+        # imatge = cv2.resize(data, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        up = nn.Upsample(scale_factor=2, mode='bicubic')
+        image_t1 = up(samples['image_1']).to(device)
+        image_t2 = up(samples['image_2']).to(device)
+        image_t3 = up(samples['image_3']).to(device)
+        image_t4 = up(samples['image_4']).to(device)
+        image_t5 = up(samples['image_5']).to(device)
         target = t['target'].to(device)
+        target.unsqueeze(1)
+        target = torch.reshape(target, (4, 1, 4, 128, 128))
         optimizer.zero_grad()
         output = model(image_t1.float(), image_t2.float(), image_t3.float(), image_t4.float(), image_t5.float())
         loss = F.mse_loss(output, target)
@@ -163,8 +199,8 @@ def main():
     # Training settings
     parser = argparse.ArgumentParser(description='Deep neural network for Super-resolution of multitemporal '
                                                  'Remote Sensing Images')
-    parser.add_argument('--batch-size', type=int, default=32, metavar='N',
-                        help='input batch size for training (default: 32)')
+    parser.add_argument('--batch-size', type=int, default=4, metavar='N',
+                        help='input batch size for training (default: 4)')
     # parser.add_argument('--T-in', type=int, default=9, metavar='N',
     #                    help='input number of images (default: 9')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
