@@ -18,10 +18,13 @@ for file_name in list_files:
         print("File ", file_name)
         print("Open HR file")
         # Open the images and convert it to 'numpy.array'
-        hr = np.load(file_name)
-        np.save(dir_save + str("CAIRO_"+file_name), hr)
-        # borrar fichero de la carpeta patches
-        os.remove(dir_load+file_name)
+        if "image_5" in file_name:
+            hr = np.load(file_name)
+            new_name = file_name.replace("image_5", "CAIRO")
+            print(new_name)
+            np.save(dir_save + str(new_name), hr)
+            # borrar fichero de la carpeta patches
+            os.remove(dir_load+file_name)
 
     print("Done")
 

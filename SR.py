@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.optim.lr_scheduler import StepLR
+from SR_Dataset import SR_Dataset, ToTensor
 import cv2
 import numpy as np
 from torchvision import datasets, transforms
@@ -14,7 +15,6 @@ class SR(nn.Module):
     def __init__(self):
         super(SR, self).__init__()  # más adelant puede que lo cambie
         # SISRNET
-        self.channels = 1  # canales de entrada (1 imagen)
         self.conv1 = nn.Conv3d(1, 64, kernel_size=(1, 3, 3), stride=(1, 1, 1), padding=(0, 1, 1))
         self.instancenorm1 = nn.InstanceNorm3d(64, affine=True)  # affine=True --> Learnable parameters
         self.conv2 = nn.Conv3d(64, 64, kernel_size=(1, 3, 3), stride=(1, 1, 1), padding=(0, 1, 1))
@@ -23,17 +23,33 @@ class SR(nn.Module):
         self.conv3 = nn.Conv3d(64, 64, kernel_size=(3, 3, 3), stride=(1, 1, 1), padding=(0, 1, 1))
         self.conv4 = nn.Conv3d(64, 1, kernel_size=(1, 1, 1), stride=(1, 1, 1), padding=(0, 1, 1))
 
-    def forward(self, input):  # x=[b, 1, depth, height, weight] --> interpolated image
-        print(input.shape)  # [32,5,64,64]
-        input.unsqueeze(1)
-        # x = torch.reshape(x, (32, 1, 5, 64, 64))  # (32,1,5,64,64)
+    def forward(self, image_t1, image_t2, image_t3, image_t4, image_t5):  # x=[b, 1, depth, height, weight] --> interpolated image
+        # print(image_t1.shape)  # [32,5,64,64]
+        x = []
+        image_t1.unsqueeze(1)
+        x1 = torch.reshape(image_t1, (32, 1, 4, 64, 64))  # (32,1,5,64,64)
+        x.append(x1)
+        image_t2.unsqueeze(1)
+        x2 = torch.reshape(image_t2, (32, 1, 4, 64, 64))  # (32,1,5,64,64)
+        x.append(x2)
+        image_t3.unsqueeze(1)
+        x3 = torch.reshape(image_t3, (32, 1, 4, 64, 64))  # (32,1,5,64,64)
+        x.append(x3)
+        image_t4.unsqueeze(1)
+        x4 = torch.reshape(image_t4, (32, 1, 4, 64, 64))  # (32,1,5,64,64)
+        x.append(x4)
+        image_t5.unsqueeze(1)
+        x5 = torch.reshape(image_t5, (32, 1, 4, 64, 64))  # (32,1,5,64,64)
+        x.append(x5)
         image_interpol = []
         images = []
 
         # SISRNET
         for i in range(5):  # range(x) con x el número de imagenes por cada batch_size
 
-            x = input[:, :, i, :, :]
+            x = x[i]
+            x.unsqueeze(1)
+            # print(x.shape)
 
             image_interpol.append(x)
 
@@ -105,11 +121,16 @@ class SR(nn.Module):
 
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
-    for batch_idx, (data, target) in enumerate(train_loader):  # data corresponde a las 9 imagenes LR, target imag HR
+    for batch_idx, (samples, t) in enumerate(train_loader):  # data corresponde a las 5 imagenes LR, target imag HR
         # data = cv2.resize(data, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
-        data, target = data.to(device), target.to(device)
+        image_t1 = samples['image_1'].to(device)
+        image_t2 = samples['image_2'].to(device)
+        image_t3 = samples['image_3'].to(device)
+        image_t4 = samples['image_4'].to(device)
+        image_t5 = samples['image_5'].to(device)
+        target = t['target'].to(device)
         optimizer.zero_grad()
-        output = model(data)
+        output = model(image_t1.float(), image_t2.float(), image_t3.float(), image_t4.float(), image_t5.float())
         loss = F.mse_loss(output, target)
         loss.backward()
         optimizer.step()
@@ -171,18 +192,18 @@ def main():
     device = torch.device("cuda" if use_cuda else "cpu")
 
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
+
+    dataset = SR_Dataset(csv_file='/Users/pmaso98/Desktop/TFG/Dataset/Images_t1.csv',
+                         root_dir='/Users/pmaso98/Desktop/TFG/Dataset/', transform=ToTensor())
+
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [11559, 2890])
+
     train_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('../data', train=True, download=True,
-                       transform=transforms.Compose([
-                           transforms.ToTensor(),
-                           transforms.Normalize((0.1307,), (0.3081,))
-                       ])),
+        train_dataset,
         batch_size=args.batch_size, shuffle=True, **kwargs)
+
     test_loader = torch.utils.data.DataLoader(
-        datasets.MNIST('../data', train=False, transform=transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))
-        ])),
+        test_dataset,
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
 
     model = SR().to(device)

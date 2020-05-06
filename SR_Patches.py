@@ -9,12 +9,14 @@ import earthpy.plot as ep
 import matplotlib
 import matplotlib.pyplot as plt
 
+from skimage import exposure
+
 
 # file_load = '/Users/pmaso98/Desktop/TFG/Imatges_Sentinel/Book1.csv'
 from matplotlib import cbook
 
-dir_load = "/Users/pmaso98/Desktop/TFG/Imatges_Sentinel/EL_CAIRO_5/"
-dir_save = "/Users/pmaso98/Desktop/TFG/Imatges_Sentinel/EL_CAIRO_5/"
+dir_load = "/Users/pmaso98/Desktop/TFG/Imatges_Sentinel/NEW_YORK_5/"
+dir_save = "/Users/pmaso98/Desktop/TFG/Imatges_Sentinel/NEW_YORK_5/"
 
 os.chdir(dir_load)  # change the current directory
 # cwd = os.getcwd() # get the current working directory
@@ -35,17 +37,22 @@ scale = 1
 img = 1
 
 for file_name in list_files:
-    if ".tif" in file_name:
+    if ".tiff" in file_name:
         print("File ", file_name)
         print("Open HR file")
         # Open the images and convert it to 'numpy.array'
         hr = rio.open(file_name)
         hr = hr.read()
-        print(hr.shape)
-        # ep.plot_bands(hr)
-        # ep.plot_rgb(hr, rgb=(0, 2, 1))
+        # print(hr.shape)
+        # maximo = np.amax(hr)
+        # hr = hr/maximo
+        # hr = exposure.equalize_hist(hr)
+        # print(hr)
+        # ep.plot_rgb(hr, rgb=(2, 1, 0), stretch=True)
+        # plt.show()
 
-        # NORMALIZANDO (dIVIDIENDO POR EL MAXIMO de uint16 == 32767)
+
+# NORMALIZANDO (dIVIDIENDO POR EL MAXIMO de uint16 == 32767)
         # print(hr.dtype)
         hr = hr.astype(np.uint16)
         hr = hr / 32767
