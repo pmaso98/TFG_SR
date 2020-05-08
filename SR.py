@@ -10,7 +10,11 @@ import cv2
 import skimage.metrics as skim
 import numpy as np
 import matplotlib.pyplot as plt
+import earthpy.plot as ep
 from torchvision import datasets, transforms
+import os
+import sys
+import math
 
 
 class SR(nn.Module):
@@ -160,7 +164,7 @@ class SR(nn.Module):
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
     for batch_idx, (samples, t) in enumerate(train_loader):  # data corresponde a las 5 imagenes LR, target imag HR
-        print(len(train_loader.dataset))
+        # print(len(train_loader.dataset))
         image_t1 = samples['image_1'].to(device)
         image_t2 = samples['image_2'].to(device)
         image_t3 = samples['image_3'].to(device)
@@ -173,16 +177,19 @@ def train(args, model, device, train_loader, optimizer, epoch):
         loss = F.mse_loss(output, target)
         loss.backward()
         optimizer.step()
-        if batch_idx % args.log_interval == 0:
+        if batch_idx % args.log_interval == 0 and batch_idx * len(samples) <= len(train_loader.dataset):
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(samples), len(train_loader.dataset),
-                       100. * batch_idx / len(train_loader.dataset), loss.item()))
+                       100. * batch_idx * len(samples) / len(train_loader.dataset), loss.item()))
 
 
 def test(args, model, device, test_loader):
     model.eval()
     test_loss = 0
     correct = 0
+    psnr = 0
+    predicted_image = []
+    real_image = []
     with torch.no_grad():
         for samples, t in test_loader:  # potser sense enumerate
             image_t1 = samples['image_1'].to(device)
@@ -193,25 +200,49 @@ def test(args, model, device, test_loader):
             target = t['target'].to(device)
             target = torch.unsqueeze(target, 1)
             output = model(image_t1.float(), image_t2.float(), image_t3.float(), image_t4.float(), image_t5.float())
+            psnr += PSNR.__call__(output, target)
             test_loss += F.mse_loss(output, target, reduction='sum').item()  # sum up batch loss
-            pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
-            correct += pred.eq(target.view_as(pred)).sum().item()
+            real = target.numpy()
+            pred_batch_size = output.numpy()
+            print(pred_batch_size.shape)
+            # show_im(real[0], real[1], pred[0], pred[1])
+            for i in range(0, args.test_batch_size):
+                print(i)
+                predicted_image.append(pred_batch_size[i, :, :, :, :])
+                real_image.append((real[i, :, :, :, :]))
+                predicted_image[i] = predicted_image[i].reshape(4, 128, 128)
+                real_image[i] = real_image[i].reshape(4, 128, 128)
+                ep.plot_rgb(predicted_image[i], rgb=(2, 1, 0), stretch=True)
+                ep.plot_rgb(real_image[i], rgb=(2, 1, 0), stretch=True)
 
     test_loss /= len(test_loader.dataset)
     psnr /= len(test_loader.dataset)
 
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
+    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%), PSNR: ({:.2f} db)\n'.format(
         test_loss, correct, len(test_loader.dataset),
-        100. * correct / len(test_loader.dataset)))
+        100. * correct / len(test_loader.dataset), psnr))
+
+
+class PSNR:
+    """Peak Signal to Noise Ratio
+    img1 and img2 have range [0, 1]"""
+
+    def __init__(self):
+        self.name = "PSNR"
+
+    @staticmethod
+    def __call__(img1, img2):
+        mse = torch.mean((img1 - img2) ** 2)
+        return 20 * torch.log10(1.0 / torch.sqrt(mse))
 
 
 def main():
     # Training settings
     parser = argparse.ArgumentParser(description='Deep neural network for Super-resolution of multitemporal '
                                                  'Remote Sensing Images')
-    parser.add_argument('--batch-size', type=int, default=60, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=4, metavar='N',
                         help='input batch size for training (default: 4)')
-    parser.add_argument('--test-batch-size', type=int, default=4, metavar='N',
+    parser.add_argument('--test-batch-size', type=int, default=5, metavar='N',
                         help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
                         help='number of epochs to train (default: 80)')
@@ -223,7 +254,7 @@ def main():
                         help='disables CUDA training')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
-    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
+    parser.add_argument('--log-interval', type=int, default=1, metavar='N',
                         help='how many batches to wait before logging training status')
 
     parser.add_argument('--save-model', action='store_true', default=False,
@@ -239,14 +270,16 @@ def main():
 
     train_dataset = SR_Dataset(csv_file='/Users/pmaso98/Desktop/TFG/Mini_Dataset/train_dataset.csv',
                                root_dir='/Users/pmaso98/Desktop/TFG/Mini_Dataset/', transform=ToTensor())
+
     test_dataset = SR_Dataset(csv_file='/Users/pmaso98/Desktop/TFG/Mini_Dataset/test_dataset.csv',
                               root_dir='/Users/pmaso98/Desktop/TFG/Mini_Dataset/', transform=ToTensor())
+
     validation_dataset = SR_Dataset(csv_file='/Users/pmaso98/Desktop/TFG/Mini_Dataset/validation_dataset.csv',
                                     root_dir='/Users/pmaso98/Desktop/TFG/Mini_Dataset/', transform=ToTensor())
 
-    print(train_dataset.__len__())
-    print(test_dataset.__len__())
-    print(validation_dataset.__len__())
+    # print(train_dataset.__len__())
+    # print(test_dataset.__len__())
+    # print(validation_dataset.__len__())
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset,
